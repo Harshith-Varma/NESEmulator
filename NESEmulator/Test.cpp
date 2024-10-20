@@ -31,14 +31,14 @@ public:
 				sOffset += " " + hex(NES.read(nAddr, true), 2);
 				nAddr += 1;
 			}
-			DrawString(nRamX, nRamY, sOffset);
+			DrawString(nRamX, nRamY, sOffset, olc::CYAN);
 			nRamY += 10;
 		}
 	}
 
 	void DrawCpu(int x, int y)	{
 		std::string status = "STATUS: ";
-		DrawString(x, y, "STATUS:", olc::WHITE);
+		DrawString(x, y, "STATUS:", olc::CYAN);
 		DrawString(x + 64, y, "N", NES.CPU.status & NES6502::N ? olc::GREEN : olc::RED);
 		DrawString(x + 80, y, "V", NES.CPU.status & NES6502::V ? olc::GREEN : olc::RED);
 		DrawString(x + 96, y, "-", NES.CPU.status & NES6502::U ? olc::GREEN : olc::RED);
@@ -58,7 +58,7 @@ public:
 		auto it_a = mapAsm.find(NES.CPU.prog_ctr);
 		int nLineY = (nLines >> 1) * 10 + y;
 		if (it_a != mapAsm.end()) {
-			DrawString(x, nLineY, (*it_a).second, olc::CYAN);
+			DrawString(x, nLineY, (*it_a).second, olc::DARK_CYAN);
 			while (nLineY < (nLines * 10) + y) {
 				nLineY += 10;
 				if (++it_a != mapAsm.end())	{
@@ -80,29 +80,19 @@ public:
 	}
 
 	bool OnUserCreate() {
-		// Load Program (assembled at https://www.masswerk.at/6502/assembler.html)
+		// 6502 program to add two numbers and store the result in a specified memory location
 		/*
 			*=$8000
-			LDX #10
-			STX $0000
-			LDX #3
-			STX $0001
-			LDY $0000
-			LDA #0
 			CLC
-			loop
-			ADC $0001
-			DEY
-			BNE loop
-			STA $0002
-			NOP
-			NOP
+			LDA #04
+			ADC #03
+			STA $0010
 			NOP
 		*/
 
 		// Convert hex string into bytes for RAM
 		std::stringstream ss;
-		ss << "A2 0A 8E 00 00 A2 03 8E 01 00 AC 00 00 A9 00 18 6D 01 00 88 D0 FA 8D 02 00 EA EA EA";
+		ss << "18 A9 04 69 03 8D 10 00 EA";
 		uint16_t nOffset = 0x8000;
 		while (!ss.eof()) {
 			std::string b;
@@ -123,24 +113,18 @@ public:
 	}
 
 	bool OnUserUpdate(float fElapsedTime) {
-		Clear(olc::DARK_BLUE);
+		Clear(olc::BLACK);
 
 		if (GetKey(olc::Key::SPACE).bPressed) {
-			do {
-				NES.CPU.clock();
-			} while (!NES.CPU.cyclesLeft == 0);
+			do { NES.CPU.clock(); } while (!NES.CPU.cyclesLeft == 0);
 		}
 
-		if (GetKey(olc::Key::R).bPressed)
-			NES.CPU.reset();
+		if (GetKey(olc::Key::R).bPressed) {	NES.CPU.reset(); }
 
-		if (GetKey(olc::Key::I).bPressed)
-			NES.CPU.interruptRequest();
-
-		if (GetKey(olc::Key::N).bPressed)
-			NES.CPU.nonMaskableInterrupt();
-
-		// Draw Ram Page 0x00		
+		if (GetKey(olc::Key::I).bPressed) { NES.CPU.interruptRequest(); }
+			
+		if (GetKey(olc::Key::N).bPressed) { NES.CPU.nonMaskableInterrupt(); }
+		
 		DrawRam(2, 2, 0x0000, 16, 16);
 		DrawRam(2, 182, 0x8000, 16, 16);
 		DrawCpu(448, 2);

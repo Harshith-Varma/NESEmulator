@@ -1,6 +1,6 @@
 #include "NES6502.h"
 #include "Bus.h"
-
+#include "Definitions.h"
 
 /**
  * @brief WARNING!!!!!!!!!!
@@ -67,12 +67,8 @@ uint8_t NES6502::getFlag(FLAGS f) {
 
 // Sets or clears a specific bit of the status register
 void NES6502::setFlag(FLAGS f, bool v) {
-	if (v) {
-		status |= f;
-	}
-	else {
-		status &= ~f;
-	}
+	if (v) { status |= f; }
+	else { status &= ~f; }
 }
 
 // Addressing Modes:
@@ -90,9 +86,8 @@ uint8_t NES6502::IMM() {
 }
 
 uint8_t NES6502::ZP0() {
-	// TODO: DIFFERENT
 	absAddress = read(prog_ctr++);
-	absAddress &= 0x00FF;
+	absAddress &= ZERO_PAGE_MAX_OFFSET;
 
 	return 0x00;
 }
@@ -100,7 +95,7 @@ uint8_t NES6502::ZP0() {
 uint8_t NES6502::ZPX() {
 	absAddress = (read(prog_ctr++) + x);
 	prog_ctr++;
-	absAddress &= 0x00FF;
+	absAddress &= ZERO_PAGE_MAX_OFFSET;
 
 	return 0x00;
 }
@@ -108,7 +103,7 @@ uint8_t NES6502::ZPX() {
 uint8_t NES6502::ZPY() {
 	absAddress = (read(prog_ctr++) + y);
 	prog_ctr++;
-	absAddress &= 0x00FF;
+	absAddress &= ZERO_PAGE_MAX_OFFSET;
 
 	return 0x00;
 }
@@ -142,7 +137,7 @@ uint8_t NES6502::ABX() {
 
 	// check if the page has changed after offsetting the address by X, and indicate accordingly 
 	// by returning 1; this will add an additional clock cycle to this instruction
-	return ((absAddress & 0xFF00) != (highBits << 8)) ? 1 : 0x00;
+	return ((absAddress & PAGE_CHANGE_BY_OVERFLOW) != (highBits << 8)) ? 1 : 0x00;
 }
 
 uint8_t NES6502::ABY() {
@@ -155,7 +150,7 @@ uint8_t NES6502::ABY() {
 
 	// check if the page has changed after offsetting the address by X, and indicate accordingly 
 	// by returning 1; this will add an additional clock cycle to this instruction
-	return ((absAddress & 0xFF00) != (highBits << 8)) ? 1 : 0x00;
+	return ((absAddress & PAGE_CHANGE_BY_OVERFLOW) != (highBits << 8)) ? 1 : 0x00;
 }
 
 uint8_t NES6502::IND() {
@@ -169,7 +164,9 @@ uint8_t NES6502::IND() {
 	// Futher details can be found here: https://www.nesdev.org/6502bugs.txt.
 	// 
 	// Some games rely on this bug, so we need to introduce this bug. (peak game dev brainrot)
-	if (lowPointerBits == 0x00FF) { absAddress = (read(pointer & 0xFF00) << 8) | read(pointer + 0); }
+	if (lowPointerBits == ZERO_PAGE_MAX_OFFSET) { 
+		absAddress = (read(pointer & PAGE_CHANGE_BY_OVERFLOW) << 8) | read(pointer + 0); 
+	} 
 	else { absAddress = read((pointer + 1) << 8) | read(pointer + 0); }
 
 	return 0x00;
@@ -178,8 +175,8 @@ uint8_t NES6502::IND() {
 uint8_t NES6502::IZX() {
 	// Pointer addressing with X offset.
 	uint16_t temp = read(prog_ctr++);
-	uint16_t lowPointerBits = read((uint16_t)(temp + (uint16_t)x) & 0x00FF);
-	uint16_t highPointerBits = read((uint16_t)(temp + (uint16_t)x + 1) & 0x00FF);
+	uint16_t lowPointerBits = read((uint16_t)(temp + (uint16_t)x) & ZERO_PAGE_MAX_OFFSET);
+	uint16_t highPointerBits = read((uint16_t)(temp + (uint16_t)x + 1) & ZERO_PAGE_MAX_OFFSET);
 
 	absAddress = (highPointerBits << 8) | lowPointerBits;
 
@@ -189,15 +186,15 @@ uint8_t NES6502::IZX() {
 uint8_t NES6502::IZY() {
 	//Pointer addressing with Y offset.
 	uint16_t temp = read(prog_ctr++);
-	uint16_t lowPointerBits = read(temp & 0x00FF);
-	uint16_t highPointerBits = read((temp + 1) & 0x00FF);
+	uint16_t lowPointerBits = read(temp & ZERO_PAGE_MAX_OFFSET);
+	uint16_t highPointerBits = read((temp + 1) & ZERO_PAGE_MAX_OFFSET);
 
 	absAddress = (highPointerBits << 8) | lowPointerBits;
 	absAddress += y;
 
 	// check if the page has changed after offsetting the address by X, and indicate accordingly 
 	// by returning 1; this will add an additional clock cycle to this instruction
-	return ((absAddress & 0xFF00) != (highPointerBits << 8)) ? 1 : 0x00;
+	return ((absAddress & PAGE_CHANGE_BY_OVERFLOW) != (highPointerBits << 8)) ? 1 : 0x00;
 }
 
 // Instructions:
@@ -229,7 +226,7 @@ uint8_t NES6502::BCS() {
 
 		// if branching crosses page boundary, increase clock by another 1
 		// this logic is applicable to all branching instructions.
-		if ((absAddress & 0xFF00) != (prog_ctr & 0xFF00)) { cyclesLeft++; }
+		if ((absAddress & PAGE_CHANGE_BY_OVERFLOW) != (prog_ctr & PAGE_CHANGE_BY_OVERFLOW)) { cyclesLeft++; }
 
 		prog_ctr = absAddress;
 	}
@@ -241,7 +238,7 @@ uint8_t NES6502::BEQ() {
 		cyclesLeft++;
 		absAddress = prog_ctr + relAddress;
 
-		if ((absAddress & 0xFF00) != (prog_ctr & 0xFF00)) { cyclesLeft++; }
+		if ((absAddress & PAGE_CHANGE_BY_OVERFLOW) != (prog_ctr & PAGE_CHANGE_BY_OVERFLOW)) { cyclesLeft++; }
 
 		prog_ctr = absAddress;
 	}
@@ -253,7 +250,7 @@ uint8_t NES6502::BMI() {
 		cyclesLeft++;
 		absAddress = prog_ctr + relAddress;
 
-		if ((absAddress & 0xFF00) != (prog_ctr & 0xFF00)) { cyclesLeft++; }
+		if ((absAddress & PAGE_CHANGE_BY_OVERFLOW) != (prog_ctr & PAGE_CHANGE_BY_OVERFLOW)) { cyclesLeft++; }
 
 		prog_ctr = absAddress;
 	}
@@ -265,7 +262,7 @@ uint8_t NES6502::BNE() {
 		cyclesLeft++;
 		absAddress = prog_ctr + relAddress;
 
-		if ((absAddress & 0xFF00) != (prog_ctr & 0xFF00)) { cyclesLeft++; }
+		if ((absAddress & PAGE_CHANGE_BY_OVERFLOW) != (prog_ctr & PAGE_CHANGE_BY_OVERFLOW)) { cyclesLeft++; }
 
 		prog_ctr = absAddress;
 	}
@@ -277,7 +274,7 @@ uint8_t NES6502::BPL() {
 		cyclesLeft++;
 		absAddress = prog_ctr + relAddress;
 
-		if ((absAddress & 0xFF00) != (prog_ctr & 0xFF00)) { cyclesLeft++; }
+		if ((absAddress & PAGE_CHANGE_BY_OVERFLOW) != (prog_ctr & PAGE_CHANGE_BY_OVERFLOW)) { cyclesLeft++; }
 
 		prog_ctr = absAddress;
 	}
@@ -289,7 +286,7 @@ uint8_t NES6502::BVC() {
 		cyclesLeft++;
 		absAddress = prog_ctr + relAddress;
 
-		if ((absAddress & 0xFF00) != (prog_ctr & 0xFF00)) { cyclesLeft++; }
+		if ((absAddress & PAGE_CHANGE_BY_OVERFLOW) != (prog_ctr & PAGE_CHANGE_BY_OVERFLOW)) { cyclesLeft++; }
 
 		prog_ctr = absAddress;
 	}
@@ -301,7 +298,7 @@ uint8_t NES6502::BVS() {
 		cyclesLeft++;
 		absAddress = prog_ctr + relAddress;
 
-		if ((absAddress & 0xFF00) != (prog_ctr & 0xFF00)) { cyclesLeft++; }
+		if ((absAddress & PAGE_CHANGE_BY_OVERFLOW) != (prog_ctr & PAGE_CHANGE_BY_OVERFLOW)) { cyclesLeft++; }
 
 		prog_ctr = absAddress;
 	}
@@ -335,7 +332,7 @@ uint8_t NES6502::ADC() {
 	// if result overflows, set carry flag
 	(temp > 255) ? setFlag(C, true) : setFlag(C, false);
 	// if page zero, set zero flag
-	((temp & 0x00FF) == 0) ? setFlag(Z, true) : setFlag(Z, false);
+	((temp & ZERO_PAGE_MAX_OFFSET) == 0) ? setFlag(Z, true) : setFlag(Z, false);
 	// set negative flag based on MSB of low byte (8th bit from 0)
 	setFlag(N, temp & 0x80);
 
@@ -344,7 +341,7 @@ uint8_t NES6502::ADC() {
 	// Will update this comment with more info later, feeling too lazy to do it now.
 	setFlag(V, (~((uint16_t)a ^ (uint16_t)fetchedData) & ((uint16_t)a ^ temp)) & 0x0080);
 
-	a = temp & 0x00FF;
+	a = temp & ZERO_PAGE_MAX_OFFSET;
 
 	// ADC can increment cycles, so we return 1
 	return 1;
@@ -354,16 +351,16 @@ uint8_t NES6502::SBC() {
 	fetch();
 
 	// Subtract is the same as add, but with an inverted value so that we can add the 2s complement instead. 
-	uint16_t invFetchedData = ((uint16_t)fetchedData) ^ 0x00FF;
+	uint16_t invFetchedData = ((uint16_t)fetchedData) ^ ZERO_PAGE_MAX_OFFSET;
 
 	uint16_t temp = (uint16_t)a + (uint16_t)invFetchedData + (uint16_t)getFlag(C);
 	(temp > 255) ? setFlag(C, true) : setFlag(C, false);
-	((temp & 0x00FF) == 0) ? setFlag(Z, true) : setFlag(Z, false);
+	((temp & ZERO_PAGE_MAX_OFFSET) == 0) ? setFlag(Z, true) : setFlag(Z, false);
 	setFlag(N, temp & 0x80);
 
 	setFlag(V, (~((uint16_t)a ^ invFetchedData) & ((uint16_t)a ^ temp)) & 0x0080);
 	
-	a = temp & 0x00FF;
+	a = temp & ZERO_PAGE_MAX_OFFSET;
 
 	// SBC can increment cycles, so we return 1
 	return 1;
@@ -372,7 +369,7 @@ uint8_t NES6502::SBC() {
 uint8_t NES6502::PHA() {
 	// 0x0100 is the base memory location of the stack; stack pointer is
 	// used to offset.
-	write(0x0100 + stack_ptr, a);
+	write(STACK_BASE_MEMORY_LOCATION + stack_ptr, a);
 	stack_ptr--;
 
 	return 0x00;
@@ -380,7 +377,7 @@ uint8_t NES6502::PHA() {
 
 uint8_t NES6502::PLA() {
 	stack_ptr++;
-	a = read(0x100 + stack_ptr);
+	a = read(STACK_BASE_MEMORY_LOCATION + stack_ptr);
 	(a == 0x00) ? setFlag(Z, true) : setFlag(Z, false);
 	setFlag(N, a & 0x80);
 
@@ -439,8 +436,8 @@ uint8_t NES6502::DEY()
 uint8_t NES6502::INC() {
 	fetch();
 	uint8_t temp = fetchedData + 1;
-	write(absAddress, temp & 0x00FF);
-	((temp & 0x00FF) == 0x00) ? setFlag(Z, true) : setFlag(Z, false);
+	write(absAddress, temp & ZERO_PAGE_MAX_OFFSET);
+	((temp & ZERO_PAGE_MAX_OFFSET) == 0x00) ? setFlag(Z, true) : setFlag(Z, false);
 	setFlag(N, temp & 0x0080);
 
 	return 0x00;
@@ -449,8 +446,8 @@ uint8_t NES6502::INC() {
 uint8_t NES6502::DEC() {
 	fetch();
 	uint8_t temp = fetchedData - 1;
-	write(absAddress, temp & 0x00FF);
-	((temp & 0x00FF) == 0x00) ? setFlag(Z, true) : setFlag(Z, false);
+	write(absAddress, temp & ZERO_PAGE_MAX_OFFSET);
+	((temp & ZERO_PAGE_MAX_OFFSET) == 0x00) ? setFlag(Z, true) : setFlag(Z, false);
 	setFlag(N, temp & 0x0080);
 
 	return 0x00;
@@ -459,9 +456,9 @@ uint8_t NES6502::DEC() {
 uint8_t NES6502::JSR() {
 	prog_ctr--;
 
-	write(0x0100 + stack_ptr, (prog_ctr >> 8) & 0x00FF);
+	write(STACK_BASE_MEMORY_LOCATION + stack_ptr, (prog_ctr >> 8) & ZERO_PAGE_MAX_OFFSET);
 	stack_ptr--;
-	write(0x0100 + stack_ptr, prog_ctr & 0x00FF);
+	write(STACK_BASE_MEMORY_LOCATION + stack_ptr, prog_ctr & ZERO_PAGE_MAX_OFFSET);
 	stack_ptr--;
 
 	prog_ctr = absAddress;
@@ -474,17 +471,17 @@ uint8_t NES6502::LSR()
 	setFlag(C, fetchedData & 0x0001);
 	uint8_t temp = fetchedData >> 1;
 
-	((temp & 0x00FF) == 0x00) ? setFlag(Z, true) : setFlag(Z, false);
+	((temp & ZERO_PAGE_MAX_OFFSET) == 0x00) ? setFlag(Z, true) : setFlag(Z, false);
 	setFlag(N, temp & 0x0080);
 
-	if (lookup[currentOpcode].addressingMode == &NES6502::IMP) { a = temp & 0x00FF; }
-	else { write(absAddress, temp & 0x00FF); }
+	if (lookup[currentOpcode].addressingMode == &NES6502::IMP) { a = temp & ZERO_PAGE_MAX_OFFSET; }
+	else { write(absAddress, temp & ZERO_PAGE_MAX_OFFSET); }
 
 	return 0x00;
 }
 
 uint8_t NES6502::PHP() {
-	write(0x0100 + stack_ptr, status | B | U);
+	write(STACK_BASE_MEMORY_LOCATION + stack_ptr, status | B | U);
 	setFlag(B, 0);
 	setFlag(U, 0);
 	stack_ptr--;
@@ -545,7 +542,7 @@ void NES6502::reset() {
 	status = 0x00 | U;
 
 	// Default address for program counter to point to in NES6502; hardcoded
-	absAddress = 0xFFFC;
+	absAddress = PROGRAM_COUNTER_DEFAULT_LOCATION_RESET;
 	uint16_t lowBits = read(absAddress);
 	uint16_t highBits = read(absAddress + 1);
 	prog_ctr = (highBits << 8) | lowBits;
@@ -562,20 +559,20 @@ void NES6502::interruptRequest() {
 	if (getFlag(I) == 0) {		
 		// Write cuurent program counter to stack; requires two writes because only 1 byte
 		// can be written per write
-		write(0x0100 + stack_ptr, (prog_ctr >> 8) & 0x00FF);
+		write(STACK_BASE_MEMORY_LOCATION + stack_ptr, (prog_ctr >> 8) & ZERO_PAGE_MAX_OFFSET);
 		stack_ptr--;
-		write(0x0100 + stack_ptr, prog_ctr & 0x00FF);
+		write(STACK_BASE_MEMORY_LOCATION + stack_ptr, prog_ctr & ZERO_PAGE_MAX_OFFSET);
 		stack_ptr++;
 
 		// Set flags and write the status register to the stack
 		setFlag(B, 0);
 		setFlag(U, 1);
 		setFlag(I, 1);
-		write(0x0100 + stack_ptr, status);
+		write(STACK_BASE_MEMORY_LOCATION + stack_ptr, status);
 		stack_ptr--;
 
 		// Set the program counter location to fixed address 0xFFEE
-		absAddress = 0xFFEE;
+		absAddress = INTERRUPT_REQUEST_DEFAULT_ADDRESS;
 		uint16_t lowBits = read(absAddress);
 		uint16_t highBits = read(absAddress + 1);
 		prog_ctr = (highBits << 8) | lowBits;
@@ -587,15 +584,15 @@ void NES6502::interruptRequest() {
 
 void NES6502::nonMaskableInterrupt() {
 	// Same as interruptRequest, but cannot be stopped by I flag being set.
-	write(0x0100 + stack_ptr, (prog_ctr >> 8) & 0x00FF);
+	write(STACK_BASE_MEMORY_LOCATION + stack_ptr, (prog_ctr >> 8) & ZERO_PAGE_MAX_OFFSET);
 	stack_ptr--;
-	write(0x0100 + stack_ptr, prog_ctr & 0x00FF);
+	write(STACK_BASE_MEMORY_LOCATION + stack_ptr, prog_ctr & ZERO_PAGE_MAX_OFFSET);
 	stack_ptr++;
 
 	setFlag(B, 0);
 	setFlag(U, 1);
 	setFlag(I, 1);
-	write(0x0100 + stack_ptr, status);
+	write(STACK_BASE_MEMORY_LOCATION + stack_ptr, status);
 	stack_ptr--;
 
 	absAddress = 0xFFEE;
@@ -611,14 +608,14 @@ uint8_t NES6502::RTI() {
 	// To return from interrupt state, we need to read the stuff we stored in the stack when the
 	// interrupt was called to restore to state before interrupt.
 	stack_ptr++;
-	status = read(0x0100 + stack_ptr);
+	status = read(STACK_BASE_MEMORY_LOCATION + stack_ptr);
 	status &= ~B;
 	status &= ~U;
 
 	stack_ptr++;
-	prog_ctr = (uint16_t)read(0x0100 + stack_ptr);
+	prog_ctr = (uint16_t)read(STACK_BASE_MEMORY_LOCATION + stack_ptr);
 	stack_ptr++;
-	prog_ctr |= (uint16_t)read(0x0100 + stack_ptr) << 8;
+	prog_ctr |= (uint16_t)read(STACK_BASE_MEMORY_LOCATION + stack_ptr) << 8;
 
 	return 0x00;
 }
