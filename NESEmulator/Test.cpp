@@ -81,6 +81,7 @@ public:
 
 	bool OnUserCreate() {
 		// 6502 program to add two numbers and store the result in a specified memory location
+		// assembled at: https://www.masswerk.at/6502/assembler.html
 		/*
 			*=$8000
 			CLC
