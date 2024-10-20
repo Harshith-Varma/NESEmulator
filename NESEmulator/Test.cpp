@@ -7,6 +7,14 @@
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
 
+/**
+ * @brief This is a test class that inherits from olc::PixelGameEngine, which is a rudimentary
+ * pixel rendering engine. I am using this GameEngine to render the contents of the RAM, General-Purpose
+ * Registers, Status Register and Program Counter for every clock cycle dynamically, as it would be 
+ * impossible to check if the instructions and opCodes are working as intended otherwise.
+ *
+ * This shit was more difficult than the actual emulation :(
+ */
 class NES6502_Test : public olc::PixelGameEngine
 {
 public:
@@ -130,7 +138,7 @@ public:
 		DrawRam(2, 182, 0x8000, 16, 16);
 		DrawCpu(448, 2);
 		DrawCode(448, 72, 26);
-		DrawString(10, 370, "SPACE = Step Instruction    R = RESET    I = IRQ    N = NMI");
+		DrawString(10, 370, "SPACE = Step	R = Reset	I = InterruptRequest	N = NonMaskableInterrupt");
 
 		return true;
 	}
